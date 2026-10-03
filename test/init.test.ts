@@ -51,6 +51,35 @@ describe("init", () => {
     });
   });
 
+  it("accepts JSONC workspace files with comments and trailing commas", async () => {
+    await withTemp(async (dir) => {
+      const workspacePath = path.join(dir, "jsonc.code-workspace");
+      fs.writeFileSync(
+        workspacePath,
+        `{
+  // editor defaults from the old workspace
+  "settings": {
+    "editor.tabSize": 2,
+  },
+  "folders": [
+    { "path": "." },
+  ],
+}\n`,
+        "utf8",
+      );
+      const result = await run({ args: ["init"], cwd: dir });
+      assert.equal(result.code, 0);
+      assert.deepEqual(readJson(path.join(dir, "armory.json")), {
+        workspaceName: path.basename(dir),
+        repos: [],
+        workspaceSettings: {
+          settings: { "editor.tabSize": 2 },
+          folders: [{ path: "." }],
+        },
+      });
+    });
+  });
+
   it("omits workspaceSettings when the workspace file is an empty object", async () => {
     await withTemp(async (dir) => {
       writeJson(path.join(dir, "empty.code-workspace"), {});

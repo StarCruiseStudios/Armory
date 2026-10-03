@@ -550,6 +550,127 @@ function findCurrentWorkspaceFile(dir: string): string | undefined {
   );
 }
 
+/** VS Code / Cursor `.code-workspace` files are JSON with comments and trailing commas. */
+function parseJsonc(text: string): unknown {
+  const stripped = stripJsonComments(text);
+  const withoutTrailingCommas = removeJsonTrailingCommas(stripped);
+  return JSON.parse(withoutTrailingCommas);
+}
+
+function stripJsonComments(json: string): string {
+  const out: string[] = [];
+  let inString = false;
+  let escaped = false;
+  let lineComment = false;
+  let blockComment = false;
+
+  for (let i = 0; i < json.length; i++) {
+    const char = json[i];
+    const next = json[i + 1];
+
+    if (lineComment) {
+      if (char === "\n" || char === "\r") {
+        lineComment = false;
+        out.push(char);
+      }
+      continue;
+    }
+
+    if (blockComment) {
+      if (char === "*" && next === "/") {
+        blockComment = false;
+        i++;
+      }
+      continue;
+    }
+
+    if (inString) {
+      out.push(char);
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      out.push(char);
+      continue;
+    }
+
+    if (char === "/" && next === "/") {
+      lineComment = true;
+      i++;
+      continue;
+    }
+
+    if (char === "/" && next === "*") {
+      blockComment = true;
+      i++;
+      continue;
+    }
+
+    out.push(char);
+  }
+
+  return out.join("");
+}
+
+function removeJsonTrailingCommas(json: string): string {
+  const out: string[] = [];
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < json.length; i++) {
+    const char = json[i];
+
+    if (inString) {
+      out.push(char);
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      out.push(char);
+      continue;
+    }
+
+    if (char === ",") {
+      let j = i + 1;
+      while (j < json.length && /\s/.test(json[j])) {
+        j++;
+      }
+      const next = json[j];
+      if (next === "}" || next === "]") {
+        continue;
+      }
+    }
+
+    out.push(char);
+  }
+
+  return out.join("");
+}
+
 function readCurrentWorkspace(dir: string): Record<string, unknown> | undefined {
   const workspacePath = findCurrentWorkspaceFile(dir);
   if (!workspacePath) {
@@ -559,7 +680,7 @@ function readCurrentWorkspace(dir: string): Record<string, unknown> | undefined 
   let parsed: unknown;
   try {
     const raw = fs.readFileSync(workspacePath, "utf8").replace(/^\uFEFF/, "");
-    parsed = JSON.parse(raw);
+    parsed = parseJsonc(raw);
   } catch (err) {
     fail(`Failed to parse ${workspacePath}: ${String(err)}`);
   }
