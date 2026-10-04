@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { gitCommands, readJson, run, withTemp, writeJson } from "./harness.ts";
+import { gitCommands, markGitRepo, readJson, run, withTemp, writeJson } from "./harness.ts";
+
+const GITIGNORE_START = "# >>> armory (managed)";
+const GITIGNORE_END = "# <<< armory (managed)";
 
 describe("init", () => {
   it("creates armory.json from the directory name when no workspace file exists", async () => {
@@ -17,6 +20,54 @@ describe("init", () => {
         workspaceName: "Widget Lab",
         repos: [],
       });
+      assert.equal(fs.existsSync(path.join(project, ".gitignore")), false);
+    });
+  });
+
+  it("writes a managed gitignore when the directory is inside a git repository", async () => {
+    await withTemp(async (dir) => {
+      const project = path.join(dir, "project");
+      fs.mkdirSync(project);
+      markGitRepo(project);
+      fs.writeFileSync(path.join(project, ".gitignore"), "node_modules/\n", "utf8");
+      const result = await run({
+        args: ["init"],
+        cwd: project,
+        homedir: path.join(dir, "home"),
+      });
+      assert.equal(result.code, 0);
+      assert.match(result.stdout, /created:/);
+      assert.match(result.stdout, /gitignore:/);
+      assert.equal(
+        fs.readFileSync(path.join(project, ".gitignore"), "utf8"),
+        [
+          "node_modules/",
+          "",
+          GITIGNORE_START,
+          "armory.ts",
+          "*.armory.code-workspace",
+          GITIGNORE_END,
+          "",
+        ].join("\n"),
+      );
+    });
+  });
+
+  it("creates a gitignore from scratch when none exists in a git repository", async () => {
+    await withTemp(async (dir) => {
+      const project = path.join(dir, "fresh");
+      fs.mkdirSync(project);
+      markGitRepo(project);
+      const result = await run({
+        args: ["init"],
+        cwd: project,
+        homedir: path.join(dir, "home"),
+      });
+      assert.equal(result.code, 0);
+      assert.equal(
+        fs.readFileSync(path.join(project, ".gitignore"), "utf8"),
+        [GITIGNORE_START, "armory.ts", "*.armory.code-workspace", GITIGNORE_END, ""].join("\n"),
+      );
     });
   });
 

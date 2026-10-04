@@ -25,7 +25,7 @@ describe("dependency graph", () => {
       assert.match(result.stderr, /git@github.com:Org\/Repo\.git/);
       assert.match(result.stderr, /No repositories from this dependency level were cloned/);
       assert.deepEqual(gitCommands(result.gitCalls), []);
-      assert.equal(fs.existsSync(path.join(dir, "deps")), true);
+      assert.equal(fs.existsSync(path.join(dir, "deps")), false);
       assert.equal(fs.existsSync(path.join(dir, "deps", "Repo")), false);
       assert.equal(fs.existsSync(path.join(dir, "demo.armory.code-workspace")), false);
     });
@@ -122,7 +122,7 @@ describe("dependency graph", () => {
       assert.match(result.stderr, /Cyclic dependency detected/);
       assert.match(result.stderr, /https:\/\/example.com\/child\.git/);
       assert.deepEqual(gitCommands(result.gitCalls), []);
-      assert.equal(fs.existsSync(path.join(child, "vendor")), true);
+      assert.equal(fs.existsSync(path.join(child, "vendor")), false);
     });
   });
 

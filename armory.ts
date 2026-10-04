@@ -322,8 +322,6 @@ function resolveContext(
     `${config.workspaceName}.armory.code-workspace`,
   );
 
-  fs.mkdirSync(reposRootAbs, { recursive: true });
-
   const usedNames = new Map<string, number>();
   const repos = config.repos.map((repo) => {
     const baseName = directoryNameFromGitUrl(repo.url);
@@ -516,6 +514,9 @@ function initConfig(): void {
 
   fs.writeFileSync(configPath, `${JSON.stringify(document, null, 4)}\n`, "utf8");
   log(`created: ${configPath}`);
+
+  const config = normalizeConfig(document, configPath);
+  ensureGitignore(resolveContext(config, configPath, path.dirname(configPath)));
 }
 
 function findCurrentWorkspaceFile(dir: string): string | undefined {
@@ -546,7 +547,7 @@ function findCurrentWorkspaceFile(dir: string): string | undefined {
 
   fail(
     `Multiple workspace files in ${dir}: ${names.join(", ")}. ` +
-      `Could not determine the current workspace.`,
+    `Could not determine the current workspace.`,
   );
 }
 
@@ -834,6 +835,7 @@ function runRecursively(
 }
 
 function cloneAll(context: ArmoryContext): void {
+  fs.mkdirSync(context.reposRootAbs, { recursive: true });
   for (const repo of context.repos) {
     if (fs.existsSync(path.join(repo.cloneDir, ".git"))) {
       log(`skip clone (exists): ${repo.cloneDir}`);
@@ -1036,6 +1038,7 @@ function ensureGitignore(context: ArmoryContext): void {
     if (next === existing) {
       continue;
     }
+    fs.mkdirSync(path.dirname(update.gitignorePath), { recursive: true });
     fs.writeFileSync(update.gitignorePath, next, "utf8");
     log(`gitignore: ${update.gitignorePath}`);
   }
