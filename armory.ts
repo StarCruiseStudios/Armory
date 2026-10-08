@@ -15,17 +15,26 @@
  *
  * Options:
  *   --help            Show this help text.
- *
+ * 
  * Examples:
  *   node armory.ts sync
  *   node armory.ts pull
  *
- * clone, fetch, and pull (and sync) each update `<workspaceName>.armory.code-workspace`
- * next to the armory.json the command was run against (including Armory shell tasks).
- * Nested armory.json files do not create or update a workspace file. Managed
- * `.gitignore` block(s) are updated when armory.json lies inside a git repository.
- *
- * Requires Node.js 22+ (native TypeScript execution) and git on PATH.
+ * armory.json workspace and repository configuration:
+ * {
+ *     "workspaceName": "name", // Required. Base name of <workspaceName>.armory.code-workspace.
+ *     "repos": [ // Optional. Repositories to clone. Defaults to [].
+ *         {
+ *             "url": "https://github.com/org/repo.git", // Required. Git clone URL.
+ *             "branch": "main", // Optional. Branch to clone. Defaults to main.
+ *             "repoPath": "./" // Optional. Subpath inside the clone added as a workspace folder. Defaults to ./.
+ *         }
+ *     ],
+ *     "reposRoot": "~/armory", // Optional. Where repos are cloned, relative to armory.json or absolute. When omitted, Armory uses ARMORY_ROOT, then ~/armory.
+ *     "excludeLocalDir": false, // Optional. If true, omit this directory from the workspace.
+ *     "skipArmoryTasks": false, // Optional. If true, omit Armory shell tasks from the workspace.
+ *     "workspaceSettings": {} // Optional. Extra VS Code workspace JSON (settings, launch configs, additional folders, tasks, and so on) merged into the generated workspace file.
+ * }
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -161,6 +170,22 @@ Commands:
 
 Options:
   --help            Show help
+
+armory.json workspace and repository configuration:
+{
+    "workspaceName": "name", // Required. Names <workspaceName>.armory.code-workspace.
+    "repos": [ // Optional. Repositories to clone. Defaults to [].
+        {
+            "url": "https://github.com/org/repo.git", // Required. Git clone URL.
+            "branch": "main", // Optional. Branch to clone. Defaults to main.
+            "repoPath": "./" // Optional. Subpath added as a workspace folder. Defaults to ./.
+        }
+    ],
+    "reposRoot": "~/armory", // Optional. Clone directory, relative to armory.json or absolute. Defaults to ARMORY_ROOT, then ~/armory.
+    "excludeLocalDir": false, // Optional. If true, omit this directory from the workspace.
+    "skipArmoryTasks": false, // Optional. If true, omit Armory shell tasks from the workspace.
+    "workspaceSettings": {} // Optional. Extra VS Code workspace JSON merged into the generated workspace file.
+}
 `;
 
 async function main(): Promise<void> {
