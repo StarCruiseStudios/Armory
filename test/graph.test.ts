@@ -26,7 +26,7 @@ describe("dependency graph", () => {
       assert.match(result.stderr, /No repositories from this dependency level were cloned/);
       assert.deepEqual(gitCommands(result.gitCalls), []);
       assert.equal(fs.existsSync(path.join(dir, "deps")), false);
-      assert.equal(fs.existsSync(path.join(dir, "deps", "Repo")), false);
+      assert.equal(fs.existsSync(path.join(dir, "deps", "Org", "Repo")), false);
       assert.equal(fs.existsSync(path.join(dir, "demo.armory.code-workspace")), false);
     });
   });
@@ -101,7 +101,7 @@ describe("dependency graph", () => {
   it("rejects a cycle already present on disk before cloning anything", async () => {
     await withTemp(async (dir) => {
       markGitRepo(dir);
-      const child = path.join(dir, "deps", "child");
+      const child = path.join(dir, "deps", "example", "child");
       markGitRepo(child);
       writeJson(path.join(child, "armory.json"), {
         workspaceName: "child",
@@ -111,7 +111,7 @@ describe("dependency graph", () => {
       writeJson(path.join(dir, "armory.json"), {
         workspaceName: "root",
         reposRoot: "./deps",
-        repos: [{ url: "https://example.com/child.git" }],
+        repos: [{ url: "https://example.com/example/child.git" }],
       });
       const result = await run({
         args: ["sync"],
@@ -120,7 +120,7 @@ describe("dependency graph", () => {
       });
       assert.equal(result.code, 1);
       assert.match(result.stderr, /Cyclic dependency detected/);
-      assert.match(result.stderr, /https:\/\/example.com\/child\.git/);
+      assert.match(result.stderr, /https:\/\/example.com\/example\/child\.git/);
       assert.deepEqual(gitCommands(result.gitCalls), []);
       assert.equal(fs.existsSync(path.join(child, "vendor")), false);
     });
@@ -132,7 +132,7 @@ describe("dependency graph", () => {
       writeJson(path.join(dir, "armory.json"), {
         workspaceName: "root",
         reposRoot: "./deps",
-        repos: [{ url: "https://example.com/child.git" }],
+        repos: [{ url: "https://example.com/example/child.git" }],
       });
       const result = await run({
         args: ["clone"],
@@ -150,7 +150,7 @@ describe("dependency graph", () => {
       assert.match(result.stderr, /Cyclic dependency detected/);
       assert.match(result.stderr, /No repositories from this dependency level were cloned/);
       assert.deepEqual(gitCommands(result.gitCalls), ["clone"]);
-      assert.equal(fs.existsSync(path.join(dir, "deps", "child", "vendor", "root")), false);
+      assert.equal(fs.existsSync(path.join(dir, "deps", "example", "child", "vendor", "org", "root")), false);
       assert.equal(fs.existsSync(path.join(dir, "root.armory.code-workspace")), true);
     });
   });
@@ -162,8 +162,8 @@ describe("dependency graph", () => {
         workspaceName: "root",
         reposRoot: "./deps",
         repos: [
-          { url: "https://example.com/alpha.git" },
-          { url: "https://example.com/beta.git" },
+          { url: "https://example.com/example/alpha.git" },
+          { url: "https://example.com/example/beta.git" },
         ],
       });
       const result = await run({
@@ -171,19 +171,19 @@ describe("dependency graph", () => {
         cwd: dir,
         onClone: (dest, args) => {
           const url = args[4];
-          if (url === "https://example.com/alpha.git" || url === "https://example.com/beta.git") {
+          if (url === "https://example.com/example/alpha.git" || url === "https://example.com/example/beta.git") {
             writeJson(path.join(dest, "armory.json"), {
               workspaceName: path.basename(dest),
               reposRoot: shared,
-              repos: [{ url: "https://example.com/common.git" }],
+              repos: [{ url: "https://example.com/example/common.git" }],
             });
             return;
           }
-          if (url === "https://example.com/common.git") {
+          if (url === "https://example.com/example/common.git") {
             writeJson(path.join(dest, "armory.json"), {
               workspaceName: "common",
               reposRoot: "./more",
-              repos: [{ url: "https://example.com/leaf.git" }],
+              repos: [{ url: "https://example.com/example/leaf.git" }],
             });
           }
         },
@@ -193,13 +193,13 @@ describe("dependency graph", () => {
         .filter((call) => call.args[0] === "clone")
         .map((call) => call.args[4]);
       assert.deepEqual(clones, [
-        "https://example.com/alpha.git",
-        "https://example.com/beta.git",
-        "https://example.com/common.git",
-        "https://example.com/leaf.git",
+        "https://example.com/example/alpha.git",
+        "https://example.com/example/beta.git",
+        "https://example.com/example/common.git",
+        "https://example.com/example/leaf.git",
       ]);
       assert.match(result.stdout, /skip dependency \(already processed\)/);
-      assert.equal(fs.existsSync(path.join(shared, "common", "more", "leaf", ".git")), true);
+      assert.equal(fs.existsSync(path.join(shared, "example", "common", "more", "example", "leaf", ".git")), true);
     });
 
   });
@@ -209,25 +209,25 @@ describe("dependency graph", () => {
       writeJson(path.join(dir, "armory.json"), {
         workspaceName: "root",
         reposRoot: "./deps",
-        repos: [{ url: "https://example.com/loop.git", repoPath: "../.." }],
+        repos: [{ url: "https://example.com/example/loop.git", repoPath: "../../.." }],
       });
       const result = await run({ args: ["clone"], cwd: dir });
       assert.equal(result.code, 1);
       assert.match(result.stderr, /Cyclic dependency detected/);
       assert.deepEqual(gitCommands(result.gitCalls), []);
-      assert.equal(fs.existsSync(path.join(dir, "deps", "loop")), false);
+      assert.equal(fs.existsSync(path.join(dir, "deps", "example", "loop")), false);
     });
   });
 
   it("fails when an existing or newly cloned nested config is invalid", async () => {
     await withTemp(async (dir) => {
-      const child = path.join(dir, "deps", "child");
+      const child = path.join(dir, "deps", "example", "child");
       fs.mkdirSync(child, { recursive: true });
       fs.writeFileSync(path.join(child, "armory.json"), "{", "utf8");
       writeJson(path.join(dir, "armory.json"), {
         workspaceName: "root",
         reposRoot: "./deps",
-        repos: [{ url: "https://example.com/child.git" }],
+        repos: [{ url: "https://example.com/example/child.git" }],
       });
       const existing = await run({ args: ["clone"], cwd: dir });
       assert.equal(existing.code, 1);

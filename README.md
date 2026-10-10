@@ -67,7 +67,7 @@ Armory will:
 | `repos[].url` | yes | Git clone URL. |
 | `repos[].branch` | no | Branch to clone (default: `main`). |
 | `repos[].repoPath` | no | Subpath inside the clone to add as a workspace folder (default: `./`). |
-| `reposRoot` | no | Where repos are cloned; relative to `armory.json` or absolute. When omitted, Armory uses the `ARMORY_ROOT` environment variable, then `~/armory`. |
+| `reposRoot` | no | Where repos are cloned, as `<reposRoot>/<owner>/<repository>` (nested groups keep their extra path segments). Relative to `armory.json` or absolute. When omitted, Armory uses the `ARMORY_ROOT` environment variable, then `~/armory`. |
 | `excludeLocalDir` | no | If `true`, omit the armory directory from the workspace file. |
 | `skipArmoryTasks` | no | If `true`, omit `Armory: …` shell tasks from the workspace file.|
 | `workspaceSettings` | no | Extra VS Code workspace JSON (settings, launch configs, additional `folders`, `tasks`, etc.). |

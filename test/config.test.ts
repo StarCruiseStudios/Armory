@@ -105,7 +105,11 @@ describe("config", () => {
         },
         {
           value: { workspaceName: "demo", repos: [{ url: ".git" }], reposRoot: "./deps" },
-          message: /Could not derive a directory name from git url/,
+          message: /Could not derive an owner and repository name from git url/,
+        },
+        {
+          value: { workspaceName: "demo", repos: [{ url: "https://example.com/widget.git" }], reposRoot: "./deps" },
+          message: /Could not derive an owner and repository name from git url/,
         },
       ];
 
@@ -123,7 +127,7 @@ describe("config", () => {
       const root = path.join(dir, "from-env");
       writeJson(path.join(dir, "armory.json"), {
         workspaceName: "demo",
-        repos: [{ url: "https://example.com/widget.git" }],
+        repos: [{ url: "https://example.com/example/widget.git" }],
       });
 
       const created = await run({
@@ -133,7 +137,7 @@ describe("config", () => {
         homedir: home,
       });
       assert.equal(created.code, 0);
-      assert.equal(fs.existsSync(path.join(root, "widget", ".git")), true);
+      assert.equal(fs.existsSync(path.join(root, "example", "widget", ".git")), true);
       assert.equal(fs.existsSync(path.join(home, "armory")), false);
 
       const fallback = await run({
@@ -143,7 +147,7 @@ describe("config", () => {
         homedir: home,
       });
       assert.equal(fallback.code, 0);
-      assert.equal(fs.existsSync(path.join(home, "armory", "widget", ".git")), true);
+      assert.equal(fs.existsSync(path.join(home, "armory", "example", "widget", ".git")), true);
 
       const empty = await run({
         args: ["clone"],

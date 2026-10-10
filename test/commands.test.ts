@@ -15,20 +15,22 @@ function config(repos: unknown[]): Record<string, unknown> {
 describe("clone, fetch, pull, and sync", () => {
   it("clones missing repos with the requested branch and skips ones that already have .git", async () => {
     await withTemp(async (dir) => {
-      const existing = path.join(dir, "deps", "widget");
+      const existing = path.join(dir, "deps", "group", "widget");
       fs.mkdirSync(existing, { recursive: true });
       fs.writeFileSync(path.join(existing, ".git"), "gitdir: pointer\n", "utf8");
       writeJson(path.join(dir, "armory.json"), config([
         { url: "https://example.com/group/widget.git/", branch: "develop" },
         { url: "git@github.com:example/widget.git", branch: "release" },
         { url: "https://example.com/other/widget.git" },
+        { url: "https://example.com/other/widget.git" },
+        { url: "https://gitlab.example/group/subgroup/tool.git" },
         { url: "ssh://git@github.com/example/plugin.git", repoPath: ".\\packages\\app" },
       ]));
 
       const result = await run({ args: ["clone"], cwd: dir });
       assert.equal(result.code, 0);
       assert.match(result.stdout, /skip clone \(exists\)/);
-      assert.deepEqual(gitCommands(result.gitCalls), ["clone", "clone", "clone"]);
+      assert.deepEqual(gitCommands(result.gitCalls), ["clone", "clone", "clone", "clone", "clone"]);
 
       const clones = result.gitCalls.filter((call) => call.args[0] === "clone");
       assert.deepEqual(clones[0]?.args, [
@@ -37,15 +39,23 @@ describe("clone, fetch, pull, and sync", () => {
         "release",
         "--single-branch",
         "git@github.com:example/widget.git",
-        path.join(dir, "deps", "widget-2"),
+        path.join(dir, "deps", "example", "widget"),
       ]);
       assert.equal(clones[0]?.cwd, undefined);
       assert.equal(clones[0]?.stdio, "inherit");
       assert.deepEqual(clones[1]?.args.slice(0, 4), ["clone", "--branch", "main", "--single-branch"]);
-      assert.equal(clones[1]?.args[5], path.join(dir, "deps", "widget-3"));
-      assert.equal(clones[2]?.args[5], path.join(dir, "deps", "plugin"));
+      assert.equal(clones[1]?.args[5], path.join(dir, "deps", "other", "widget"));
+      assert.equal(clones[2]?.args[5], path.join(dir, "deps", "other", "widget-2"));
+      assert.equal(clones[3]?.args[5], path.join(dir, "deps", "group", "subgroup", "tool"));
+      assert.equal(clones[4]?.args[5], path.join(dir, "deps", "example", "plugin"));
 
-      for (const folder of ["widget-2", "widget-3", "plugin"]) {
+      for (const folder of [
+        path.join("example", "widget"),
+        path.join("other", "widget"),
+        path.join("other", "widget-2"),
+        path.join("group", "subgroup", "tool"),
+        path.join("example", "plugin"),
+      ]) {
         const gitPath = path.join(dir, "deps", folder, ".git");
         assert.equal(fs.statSync(gitPath).isDirectory(), true);
         assert.deepEqual(fs.readdirSync(gitPath), []);
@@ -55,9 +65,9 @@ describe("clone, fetch, pull, and sync", () => {
 
   it("fails when the destination exists and is not a git repository", async () => {
     await withTemp(async (dir) => {
-      fs.mkdirSync(path.join(dir, "deps", "widget"), { recursive: true });
+      fs.mkdirSync(path.join(dir, "deps", "example", "widget"), { recursive: true });
       writeJson(path.join(dir, "armory.json"), config([
-        { url: "https://example.com/widget.git" },
+        { url: "https://example.com/example/widget.git" },
       ]));
       const result = await run({ args: ["clone"], cwd: dir });
       assert.equal(result.code, 1);
@@ -70,20 +80,20 @@ describe("clone, fetch, pull, and sync", () => {
   it("stops after a git clone failure and still leaves earlier clones in place", async () => {
     await withTemp(async (dir) => {
       writeJson(path.join(dir, "armory.json"), config([
-        { url: "https://example.com/ok.git" },
-        { url: "https://example.com/bad.git" },
+        { url: "https://example.com/example/ok.git" },
+        { url: "https://example.com/example/bad.git" },
       ]));
       const result = await run({
         args: ["clone"],
         cwd: dir,
-        failGit: (args) => args.includes("https://example.com/bad.git")
+        failGit: (args) => args.includes("https://example.com/example/bad.git")
           ? { status: 7 }
           : undefined,
       });
       assert.equal(result.code, 1);
-      assert.match(result.stderr, /git clone --branch main --single-branch https:\/\/example.com\/bad\.git .* exited with code 7/);
-      assert.equal(fs.existsSync(path.join(dir, "deps", "ok", ".git")), true);
-      assert.equal(fs.existsSync(path.join(dir, "deps", "bad")), false);
+      assert.match(result.stderr, /git clone --branch main --single-branch https:\/\/example.com\/example\/bad\.git .* exited with code 7/);
+      assert.equal(fs.existsSync(path.join(dir, "deps", "example", "ok", ".git")), true);
+      assert.equal(fs.existsSync(path.join(dir, "deps", "example", "bad")), false);
       assert.equal(fs.existsSync(path.join(dir, "demo.armory.code-workspace")), false);
     });
   });
@@ -91,7 +101,7 @@ describe("clone, fetch, pull, and sync", () => {
   it("reports spawn errors and a missing exit status", async () => {
     await withTemp(async (dir) => {
       writeJson(path.join(dir, "armory.json"), config([
-        { url: "https://example.com/missing.git" },
+        { url: "https://example.com/example/missing.git" },
       ]));
       const spawned = await run({
         args: ["clone"],
@@ -112,31 +122,31 @@ describe("clone, fetch, pull, and sync", () => {
   it("fetch and pull require an existing clone and pass the git flags through", async () => {
     await withTemp(async (dir) => {
       writeJson(path.join(dir, "armory.json"), config([
-        { url: "https://example.com/widget.git" },
+        { url: "https://example.com/example/widget.git" },
       ]));
       const missing = await run({ args: ["fetch"], cwd: dir });
       assert.equal(missing.code, 1);
       assert.match(missing.stderr, /Repository not cloned:.*Run "node armory\.ts clone" first/);
 
-      markGitRepo(path.join(dir, "deps", "widget"));
+      markGitRepo(path.join(dir, "deps", "example", "widget"));
       const fetched = await run({ args: ["fetch"], cwd: dir });
       assert.equal(fetched.code, 0);
       assert.deepEqual(gitCommands(fetched.gitCalls), ["fetch"]);
       assert.deepEqual(fetched.gitCalls[0]?.args, ["fetch", "--all", "--prune"]);
-      assert.equal(fetched.gitCalls[0]?.cwd, path.join(dir, "deps", "widget"));
+      assert.equal(fetched.gitCalls[0]?.cwd, path.join(dir, "deps", "example", "widget"));
 
       const pulled = await run({ args: ["pull"], cwd: dir });
       assert.equal(pulled.code, 0);
       assert.deepEqual(pulled.gitCalls[0]?.args, ["pull", "--ff-only"]);
-      assert.equal(pulled.gitCalls[0]?.cwd, path.join(dir, "deps", "widget"));
+      assert.equal(pulled.gitCalls[0]?.cwd, path.join(dir, "deps", "example", "widget"));
     });
   });
 
   it("sync clones, then fetches, then pulls, including repos materialized by the fake clone", async () => {
     await withTemp(async (dir) => {
       writeJson(path.join(dir, "armory.json"), config([
-        { url: "https://example.com/alpha.git", branch: "dev" },
-        { url: "https://example.com/beta.git" },
+        { url: "https://example.com/example/alpha.git", branch: "dev" },
+        { url: "https://example.com/example/beta.git" },
       ]));
       const result = await run({
         args: ["sync"],
@@ -146,7 +156,7 @@ describe("clone, fetch, pull, and sync", () => {
             writeJson(path.join(dest, "armory.json"), {
               workspaceName: "alpha",
               reposRoot: "./nested",
-              repos: [{ url: "https://example.com/leaf.git" }],
+              repos: [{ url: "https://example.com/example/leaf.git" }],
             });
           }
         },
@@ -163,9 +173,9 @@ describe("clone, fetch, pull, and sync", () => {
         "fetch",
         "pull",
       ]);
-      assert.equal(fs.existsSync(path.join(dir, "deps", "alpha", "nested", "leaf", ".git")), true);
+      assert.equal(fs.existsSync(path.join(dir, "deps", "example", "alpha", "nested", "example", "leaf", ".git")), true);
       assert.equal(
-        fs.existsSync(path.join(dir, "deps", "alpha", "alpha.armory.code-workspace")),
+        fs.existsSync(path.join(dir, "deps", "example", "alpha", "alpha.armory.code-workspace")),
         false,
       );
     });

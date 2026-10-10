@@ -30,7 +30,7 @@
  *             "repoPath": "./" // Optional. Subpath inside the clone added as a workspace folder. Defaults to ./.
  *         }
  *     ],
- *     "reposRoot": "~/armory", // Optional. Where repos are cloned, relative to armory.json or absolute. When omitted, Armory uses ARMORY_ROOT, then ~/armory.
+ *     "reposRoot": "~/armory", // Optional. Where repos are cloned, as <reposRoot>/<owner>/<name>. Relative to armory.json or absolute. When omitted, Armory uses ARMORY_ROOT, then ~/armory.
  *     "excludeLocalDir": false, // Optional. If true, omit this directory from the workspace.
  *     "skipArmoryTasks": false, // Optional. If true, omit Armory shell tasks from the workspace.
  *     "workspaceSettings": {} // Optional. Extra VS Code workspace JSON (settings, launch configs, additional folders, tasks, and so on) merged into the generated workspace file.
@@ -181,7 +181,7 @@ armory.json workspace and repository configuration:
             "repoPath": "./" // Optional. Subpath added as a workspace folder. Defaults to ./.
         }
     ],
-    "reposRoot": "~/armory", // Optional. Clone directory, relative to armory.json or absolute. Defaults to ARMORY_ROOT, then ~/armory.
+    "reposRoot": "~/armory", // Optional. Clone directory. Each repo is placed at <reposRoot>/<owner>/<name>. Relative to armory.json or absolute. Defaults to ARMORY_ROOT, then ~/armory.
     "excludeLocalDir": false, // Optional. If true, omit this directory from the workspace.
     "skipArmoryTasks": false, // Optional. If true, omit Armory shell tasks from the workspace.
     "workspaceSettings": {} // Optional. Extra VS Code workspace JSON merged into the generated workspace file.
@@ -349,11 +349,11 @@ function resolveContext(
 
   const usedNames = new Map<string, number>();
   const repos = config.repos.map((repo) => {
-    const baseName = directoryNameFromGitUrl(repo.url);
-    const count = usedNames.get(baseName) ?? 0;
-    usedNames.set(baseName, count + 1);
-    const folderName = count === 0 ? baseName : `${baseName}-${count + 1}`;
-    const cloneDir = path.join(reposRootAbs, folderName);
+    const relativePath = uniqueCloneRelativePath(
+      cloneRelativePathFromGitUrl(repo.url),
+      usedNames,
+    );
+    const cloneDir = path.join(reposRootAbs, ...relativePath.split("/"));
     const repoPathInside = normalizeRepoPath(repo.repoPath ?? "./");
     const workspaceTarget = path.resolve(cloneDir, repoPathInside);
     const workspaceFolderPath = toWorkspaceRelativePath(
@@ -367,7 +367,7 @@ function resolveContext(
       repoPath: repo.repoPath ?? "./",
       cloneDir,
       workspaceFolderPath,
-      displayName: folderName,
+      displayName: relativePath,
     };
   });
 
@@ -392,14 +392,74 @@ function defaultReposRoot(): string {
   return fromEnv;
 }
 
-function directoryNameFromGitUrl(url: string): string {
-  const trimmed = url.trim().replace(/\/+$/, "");
-  const withoutGit = trimmed.endsWith(".git") ? trimmed.slice(0, -4) : trimmed;
-  const segment = withoutGit.split(/[/:]/).filter(Boolean).pop();
+function uniqueCloneRelativePath(
+  relativePath: string,
+  usedNames: Map<string, number>,
+): string {
+  const count = usedNames.get(relativePath) ?? 0;
+  usedNames.set(relativePath, count + 1);
+  if (count === 0) {
+    return relativePath;
+  }
+  const parts = relativePath.split("/");
+  parts[parts.length - 1] = `${parts[parts.length - 1]}-${count + 1}`;
+  return parts.join("/");
+}
+
+/**
+ * Remote clone URLs keep every path segment after the host, so
+ * `https://github.com/Dangerdan9631/Armory.git` lands in `Dangerdan9631/Armory`.
+ * Local paths have no owner and use the repository directory name.
+ */
+function cloneRelativePathFromGitUrl(url: string): string {
+  const segments = repositoryPathSegments(url).filter((segment) => segment !== ".");
+  if (isRemoteGitUrl(url)) {
+    if (segments.length < 2 || segments.some((segment) => segment === "..")) {
+      fail(`Could not derive an owner and repository name from git url: ${url}`);
+    }
+    return segments.join("/");
+  }
+
+  const segment = segments.filter((part) => part !== "..").at(-1);
   if (!segment) {
-    fail(`Could not derive a directory name from git url: ${url}`);
+    fail(`Could not derive an owner and repository name from git url: ${url}`);
   }
   return segment;
+}
+
+function isRemoteGitUrl(url: string): boolean {
+  const value = url.trim().replace(/\\/g, "/");
+  if (value.includes("://")) {
+    try {
+      const protocol = new URL(value).protocol;
+      return protocol === "http:" || protocol === "https:" || protocol === "ssh:";
+    } catch {
+      return false;
+    }
+  }
+  return /^(?:[^@/]+@)?([^:/]+):(.+)$/.test(value) && !/^[A-Za-z]:\//.test(value);
+}
+
+function repositoryPathSegments(url: string): string[] {
+  let value = url.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  if (value.toLowerCase().endsWith(".git")) {
+    value = value.slice(0, -4);
+  }
+
+  let repoPath = value;
+  const scpMatch = value.match(/^(?:[^@/]+@)?([^:/]+):(.+)$/);
+  if (scpMatch && !value.includes("://") && !/^[A-Za-z]:\//.test(value)) {
+    repoPath = scpMatch[2];
+  } else {
+    try {
+      const parsed = new URL(value);
+      repoPath = parsed.protocol === "file:" ? fileURLToPath(parsed) : parsed.pathname;
+    } catch {
+      repoPath = value;
+    }
+  }
+
+  return repoPath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
 }
 
 function normalizeRepoPath(repoPath: string): string {

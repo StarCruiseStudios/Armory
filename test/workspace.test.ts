@@ -21,8 +21,8 @@ describe("workspace file", () => {
         workspaceName: "demo",
         reposRoot: "./deps",
         repos: [
-          { url: "https://example.com/widget.git", repoPath: "./packages/app" },
-          { url: "https://example.com/plugin.git", repoPath: "./packages/app" },
+          { url: "https://example.com/example/widget.git", repoPath: "./packages/app" },
+          { url: "https://example.com/example/plugin.git", repoPath: "./packages/app" },
         ],
         workspaceSettings: {
           settings: { "files.eol": "\n" },
@@ -64,8 +64,8 @@ describe("workspace file", () => {
       };
       assert.deepEqual(document.folders, [
         { name: path.basename(dir), path: "." },
-        { name: "widget", path: "deps/widget/packages/app" },
-        { name: "plugin", path: "deps/plugin/packages/app" },
+        { name: "example/widget", path: "deps/example/widget/packages/app" },
+        { name: "example/plugin", path: "deps/example/plugin/packages/app" },
         { name: "notes", path: "../notes" },
       ]);
       assert.deepEqual(document.settings, { "files.eol": "\n" });
@@ -81,7 +81,7 @@ describe("workspace file", () => {
         armoryTasks(`\${workspaceFolder:${path.basename(dir)}}`),
       );
       assert.equal(
-        fs.existsSync(path.join(dir, "deps", "plugin", "packages", "app", "nested.armory.code-workspace")),
+        fs.existsSync(path.join(dir, "deps", "example", "plugin", "packages", "app", "nested.armory.code-workspace")),
         false,
       );
       assert.match(fs.readFileSync(workspacePath, "utf8"), /\n$/);
@@ -94,16 +94,16 @@ describe("workspace file", () => {
         workspaceName: "demo",
         excludeLocalDir: true,
         reposRoot: "./deps",
-        repos: [{ url: "https://example.com/widget.git" }],
+        repos: [{ url: "https://example.com/example/widget.git" }],
       });
-      fs.mkdirSync(path.join(dir, "deps", "widget", ".git"), { recursive: true });
+      fs.mkdirSync(path.join(dir, "deps", "example", "widget", ".git"), { recursive: true });
       const pulled = await run({ args: ["pull"], cwd: dir });
       assert.equal(pulled.code, 0);
       const document = readJson(path.join(dir, "demo.armory.code-workspace")) as {
         folders: unknown[];
         tasks: { tasks: Array<{ options: { cwd: string } }> };
       };
-      assert.deepEqual(document.folders, [{ name: "widget", path: "deps/widget" }]);
+      assert.deepEqual(document.folders, [{ name: "example/widget", path: "deps/example/widget" }]);
       assert.equal(document.tasks.tasks[0]?.options.cwd, "${fileDirname:${workspaceFile}}");
     });
   });

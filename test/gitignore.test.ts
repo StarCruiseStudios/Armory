@@ -29,7 +29,7 @@ describe("gitignore", () => {
       writeJson(path.join(dir, "armory.json"), {
         workspaceName: "demo",
         reposRoot: "./deps",
-        repos: [{ url: "https://example.com/widget.git" }],
+        repos: [{ url: "https://example.com/example/widget.git" }],
       });
 
       const first = await run({ args: ["clone"], cwd: dir });
@@ -76,7 +76,7 @@ describe("gitignore", () => {
         writeJson(path.join(project, "armory.json"), {
           workspaceName: "demo",
           reposRoot: outside,
-          repos: [{ url: "https://example.com/widget.git" }],
+          repos: [{ url: "https://example.com/example/widget.git" }],
         });
         const external = await run({ args: ["clone"], cwd: project });
         assert.equal(external.code, 0);
@@ -99,7 +99,7 @@ describe("gitignore", () => {
       writeJson(path.join(project, "armory.json"), {
         workspaceName: "demo",
         reposRoot: "../external",
-        repos: [{ url: "https://example.com/widget.git" }],
+        repos: [{ url: "https://example.com/example/widget.git" }],
       });
       const result = await run({ args: ["clone"], cwd: project });
       assert.equal(result.code, 0);
@@ -121,15 +121,15 @@ describe("gitignore", () => {
         workspaceName: "demo",
         reposRoot: ".",
         repos: [
-          { url: "https://example.com/widget.git" },
-          { url: "https://example.com/plugin.git" },
+          { url: "https://example.com/example/widget.git" },
+          { url: "https://example.com/example/plugin.git" },
         ],
       });
       const result = await run({ args: ["clone"], cwd: dir });
       assert.equal(result.code, 0);
       assert.equal(
         fs.readFileSync(path.join(dir, ".gitignore"), "utf8"),
-        [START, "armory.ts", "*.armory.code-workspace", "widget/", "plugin/", END, ""].join("\n"),
+        [START, "armory.ts", "*.armory.code-workspace", "example/widget/", "example/plugin/", END, ""].join("\n"),
       );
 
       writeJson(path.join(dir, "armory.json"), {
@@ -152,7 +152,7 @@ describe("gitignore", () => {
       writeJson(path.join(dir, "armory.json"), {
         workspaceName: "root",
         reposRoot: "./deps",
-        repos: [{ url: "https://example.com/child.git" }],
+        repos: [{ url: "https://example.com/example/child.git" }],
       });
       const result = await run({
         args: ["clone"],
@@ -169,11 +169,11 @@ describe("gitignore", () => {
       assert.equal(result.code, 0);
       assert.equal(fs.existsSync(path.join(dir, ".gitignore")), false);
       assert.equal(
-        fs.readFileSync(path.join(dir, "deps", "child", ".gitignore"), "utf8"),
+        fs.readFileSync(path.join(dir, "deps", "example", "child", ".gitignore"), "utf8"),
         [START, "armory.ts", "*.armory.code-workspace", "vendor/", END, ""].join("\n"),
       );
       assert.equal(
-        fs.existsSync(path.join(dir, "deps", "child", "child.armory.code-workspace")),
+        fs.existsSync(path.join(dir, "deps", "example", "child", "child.armory.code-workspace")),
         false,
       );
     });
