@@ -29,6 +29,16 @@ export type RunResult = {
   gitCalls: GitCall[];
 };
 
+export function cloneGitUrl(args: readonly string[]): string | undefined {
+  if (args[0] !== "clone") {
+    return undefined;
+  }
+  if (args[1] === "--branch") {
+    return args[4];
+  }
+  return args[1];
+}
+
 export type RunOptions = {
   args: string[];
   cwd: string;

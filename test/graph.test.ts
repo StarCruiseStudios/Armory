@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, it } from "node:test";
-import { gitCommands, markGitRepo, run, withTemp, writeJson } from "./harness.ts";
+import { cloneGitUrl, gitCommands, markGitRepo, run, withTemp, writeJson } from "./harness.ts";
 
 describe("dependency graph", () => {
   it("rejects a direct cycle before cloning, including equivalent git urls", async () => {
@@ -170,7 +170,7 @@ describe("dependency graph", () => {
         args: ["clone"],
         cwd: dir,
         onClone: (dest, args) => {
-          const url = args[4];
+          const url = cloneGitUrl(args);
           if (url === "https://example.com/example/alpha.git" || url === "https://example.com/example/beta.git") {
             writeJson(path.join(dest, "armory.json"), {
               workspaceName: path.basename(dest),
@@ -191,7 +191,7 @@ describe("dependency graph", () => {
       assert.equal(result.code, 0);
       const clones = result.gitCalls
         .filter((call) => call.args[0] === "clone")
-        .map((call) => call.args[4]);
+        .map((call) => cloneGitUrl(call.args));
       assert.deepEqual(clones, [
         "https://example.com/example/alpha.git",
         "https://example.com/example/beta.git",

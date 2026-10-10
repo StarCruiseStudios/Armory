@@ -26,7 +26,7 @@
  *     "repos": [ // Optional. Repositories to clone. Defaults to [].
  *         {
  *             "url": "https://github.com/org/repo.git", // Required. Git clone URL.
- *             "branch": "main", // Optional. Branch to clone. Defaults to main.
+ *             "branch": "main", // Optional. When set, clone that branch into <owner>/<repo>-<branch>. When omitted, use the remote default at <owner>/<repo>.
  *             "repoPath": "./" // Optional. Subpath inside the clone added as a workspace folder. Defaults to ./.
  *         }
  *     ],
@@ -134,7 +134,7 @@ type ArmoryConfig = {
 
 type ResolvedRepo = {
   url: string;
-  branch: string;
+  branch?: string;
   repoPath: string;
   cloneDir: string;
   workspaceFolderPath: string;
@@ -286,7 +286,7 @@ function normalizeConfig(parsed: unknown, configPath: string): ArmoryConfig {
     }
     return {
       url,
-      branch: stringField(repo, "branch") ?? "main",
+      branch: stringField(repo, "branch"),
       repoPath: stringField(repo, "repoPath") ?? "./",
     };
   });
@@ -347,14 +347,43 @@ function resolveContext(
     `${config.workspaceName}.armory.code-workspace`,
   );
 
-  const usedNames = new Map<string, number>();
+  const cloneSlots = new Map<
+    string,
+    { cloneRelative: string; url: string; cloneDir: string }
+  >();
+  const cloneRelativeOwners = new Map<string, string>();
+
   const repos = config.repos.map((repo) => {
-    const relativePath = uniqueCloneRelativePath(
+    const repoPathValue = repo.repoPath ?? "./";
+    const repoPathInside = normalizeRepoPath(repoPathValue);
+    const urlKey = canonicalGitUrl(repo.url, armoryDir);
+    const cloneKey = `${urlKey}\0${repo.branch ?? ""}`;
+    const cloneRelative = cloneRelativePathWithBranch(
       cloneRelativePathFromGitUrl(repo.url),
-      usedNames,
+      repo.branch,
     );
-    const cloneDir = path.join(reposRootAbs, ...relativePath.split("/"));
-    const repoPathInside = normalizeRepoPath(repo.repoPath ?? "./");
+
+    let cloneDir: string;
+    const existing = cloneSlots.get(cloneKey);
+    if (existing) {
+      cloneDir = existing.cloneDir;
+    } else {
+      const ownerKey = cloneRelativeOwners.get(cloneRelative);
+      if (ownerKey !== undefined && ownerKey !== cloneKey) {
+        fail(
+          `Cannot clone ${repo.url}: ${path.join(reposRootAbs, ...cloneRelative.split("/"))} ` +
+          "is already used by another repository with the same branch treatment.",
+        );
+      }
+      cloneDir = path.join(reposRootAbs, ...cloneRelative.split("/"));
+      cloneSlots.set(cloneKey, {
+        cloneRelative,
+        url: repo.url,
+        cloneDir,
+      });
+      cloneRelativeOwners.set(cloneRelative, cloneKey);
+    }
+
     const workspaceTarget = path.resolve(cloneDir, repoPathInside);
     const workspaceFolderPath = toWorkspaceRelativePath(
       path.dirname(workspaceFilePath),
@@ -363,11 +392,11 @@ function resolveContext(
 
     return {
       url: repo.url,
-      branch: repo.branch ?? "main",
-      repoPath: repo.repoPath ?? "./",
+      branch: repo.branch,
+      repoPath: repoPathValue,
       cloneDir,
       workspaceFolderPath,
-      displayName: relativePath,
+      displayName: workspaceDisplayName(cloneRelative, repoPathInside),
     };
   });
 
@@ -392,18 +421,41 @@ function defaultReposRoot(): string {
   return fromEnv;
 }
 
-function uniqueCloneRelativePath(
-  relativePath: string,
-  usedNames: Map<string, number>,
+function cloneRelativePathWithBranch(
+  baseRelative: string,
+  branch?: string,
 ): string {
-  const count = usedNames.get(relativePath) ?? 0;
-  usedNames.set(relativePath, count + 1);
-  if (count === 0) {
-    return relativePath;
+  if (!branch) {
+    return baseRelative;
   }
-  const parts = relativePath.split("/");
-  parts[parts.length - 1] = `${parts[parts.length - 1]}-${count + 1}`;
+  const flatBranch = branch.replace(/[/\\]+/g, "-");
+  const parts = baseRelative.split("/");
+  parts[parts.length - 1] = `${parts[parts.length - 1]}-${flatBranch}`;
   return parts.join("/");
+}
+
+function workspaceDisplayName(
+  cloneRelative: string,
+  repoPathInside: string,
+): string {
+  if (repoPathInside === ".") {
+    return cloneRelative;
+  }
+  return `${cloneRelative}/${repoPathInside}`;
+}
+
+function uniqueCloneDirs(repos: ResolvedRepo[]): ResolvedRepo[] {
+  const seen = new Set<string>();
+  const unique: ResolvedRepo[] = [];
+  for (const repo of repos) {
+    const key = canonicalPath(repo.cloneDir);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    unique.push(repo);
+  }
+  return unique;
 }
 
 /**
@@ -921,7 +973,7 @@ function runRecursively(
 
 function cloneAll(context: ArmoryContext): void {
   fs.mkdirSync(context.reposRootAbs, { recursive: true });
-  for (const repo of context.repos) {
+  for (const repo of uniqueCloneDirs(context.repos)) {
     if (fs.existsSync(path.join(repo.cloneDir, ".git"))) {
       log(`skip clone (exists): ${repo.cloneDir}`);
       continue;
@@ -931,13 +983,25 @@ function cloneAll(context: ArmoryContext): void {
         `Cannot clone ${repo.url}: ${repo.cloneDir} exists but is not a git repository.`,
       );
     }
-    log(`clone ${repo.url} -> ${repo.cloneDir} (branch ${repo.branch})`);
-    runGit(["clone", "--branch", repo.branch, "--single-branch", repo.url, repo.cloneDir]);
+    if (repo.branch) {
+      log(`clone ${repo.url} -> ${repo.cloneDir} (branch ${repo.branch})`);
+      runGit([
+        "clone",
+        "--branch",
+        repo.branch,
+        "--single-branch",
+        repo.url,
+        repo.cloneDir,
+      ]);
+    } else {
+      log(`clone ${repo.url} -> ${repo.cloneDir} (default branch)`);
+      runGit(["clone", repo.url, repo.cloneDir]);
+    }
   }
 }
 
 function fetchAll(context: ArmoryContext): void {
-  for (const repo of context.repos) {
+  for (const repo of uniqueCloneDirs(context.repos)) {
     ensureGitRepo(repo);
     log(`fetch: ${repo.cloneDir}`);
     runGit(["fetch", "--all", "--prune"], repo.cloneDir);
@@ -945,7 +1009,7 @@ function fetchAll(context: ArmoryContext): void {
 }
 
 function pullAll(context: ArmoryContext): void {
-  for (const repo of context.repos) {
+  for (const repo of uniqueCloneDirs(context.repos)) {
     ensureGitRepo(repo);
     log(`pull: ${repo.cloneDir}`);
     runGit(["pull", "--ff-only"], repo.cloneDir);

@@ -64,8 +64,8 @@ describe("workspace file", () => {
       };
       assert.deepEqual(document.folders, [
         { name: path.basename(dir), path: "." },
-        { name: "example/widget", path: "deps/example/widget/packages/app" },
-        { name: "example/plugin", path: "deps/example/plugin/packages/app" },
+        { name: "example/widget/packages/app", path: "deps/example/widget/packages/app" },
+        { name: "example/plugin/packages/app", path: "deps/example/plugin/packages/app" },
         { name: "notes", path: "../notes" },
       ]);
       assert.deepEqual(document.settings, { "files.eol": "\n" });

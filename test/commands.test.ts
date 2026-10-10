@@ -15,14 +15,14 @@ function config(repos: unknown[]): Record<string, unknown> {
 describe("clone, fetch, pull, and sync", () => {
   it("clones missing repos with the requested branch and skips ones that already have .git", async () => {
     await withTemp(async (dir) => {
-      const existing = path.join(dir, "deps", "group", "widget");
+      const existing = path.join(dir, "deps", "group", "widget-develop");
       fs.mkdirSync(existing, { recursive: true });
       fs.writeFileSync(path.join(existing, ".git"), "gitdir: pointer\n", "utf8");
       writeJson(path.join(dir, "armory.json"), config([
         { url: "https://example.com/group/widget.git/", branch: "develop" },
         { url: "git@github.com:example/widget.git", branch: "release" },
         { url: "https://example.com/other/widget.git" },
-        { url: "https://example.com/other/widget.git" },
+        { url: "https://example.com/other/widget.git", repoPath: "./packages/app" },
         { url: "https://gitlab.example/group/subgroup/tool.git" },
         { url: "ssh://git@github.com/example/plugin.git", repoPath: ".\\packages\\app" },
       ]));
@@ -30,7 +30,7 @@ describe("clone, fetch, pull, and sync", () => {
       const result = await run({ args: ["clone"], cwd: dir });
       assert.equal(result.code, 0);
       assert.match(result.stdout, /skip clone \(exists\)/);
-      assert.deepEqual(gitCommands(result.gitCalls), ["clone", "clone", "clone", "clone", "clone"]);
+      assert.deepEqual(gitCommands(result.gitCalls), ["clone", "clone", "clone", "clone"]);
 
       const clones = result.gitCalls.filter((call) => call.args[0] === "clone");
       assert.deepEqual(clones[0]?.args, [
@@ -39,20 +39,27 @@ describe("clone, fetch, pull, and sync", () => {
         "release",
         "--single-branch",
         "git@github.com:example/widget.git",
-        path.join(dir, "deps", "example", "widget"),
+        path.join(dir, "deps", "example", "widget-release"),
       ]);
-      assert.equal(clones[0]?.cwd, undefined);
-      assert.equal(clones[0]?.stdio, "inherit");
-      assert.deepEqual(clones[1]?.args.slice(0, 4), ["clone", "--branch", "main", "--single-branch"]);
-      assert.equal(clones[1]?.args[5], path.join(dir, "deps", "other", "widget"));
-      assert.equal(clones[2]?.args[5], path.join(dir, "deps", "other", "widget-2"));
-      assert.equal(clones[3]?.args[5], path.join(dir, "deps", "group", "subgroup", "tool"));
-      assert.equal(clones[4]?.args[5], path.join(dir, "deps", "example", "plugin"));
+      assert.deepEqual(clones[1]?.args, [
+        "clone",
+        "https://example.com/other/widget.git",
+        path.join(dir, "deps", "other", "widget"),
+      ]);
+      assert.deepEqual(clones[2]?.args, [
+        "clone",
+        "https://gitlab.example/group/subgroup/tool.git",
+        path.join(dir, "deps", "group", "subgroup", "tool"),
+      ]);
+      assert.deepEqual(clones[3]?.args, [
+        "clone",
+        "ssh://git@github.com/example/plugin.git",
+        path.join(dir, "deps", "example", "plugin"),
+      ]);
 
       for (const folder of [
-        path.join("example", "widget"),
+        path.join("example", "widget-release"),
         path.join("other", "widget"),
-        path.join("other", "widget-2"),
         path.join("group", "subgroup", "tool"),
         path.join("example", "plugin"),
       ]) {
@@ -60,6 +67,39 @@ describe("clone, fetch, pull, and sync", () => {
         assert.equal(fs.statSync(gitPath).isDirectory(), true);
         assert.deepEqual(fs.readdirSync(gitPath), []);
       }
+    });
+  });
+
+  it("shares one clone across multiple repoPath entries and uses branch-suffixed directories", async () => {
+    await withTemp(async (dir) => {
+      writeJson(path.join(dir, "armory.json"), config([
+        { url: "https://example.com/example/widget.git", repoPath: "./packages/app" },
+        { url: "https://example.com/example/widget.git", repoPath: "./packages/web" },
+        { url: "https://example.com/example/widget.git", branch: "feature/login" },
+      ]));
+      const result = await run({ args: ["clone"], cwd: dir });
+      assert.equal(result.code, 0);
+      assert.deepEqual(gitCommands(result.gitCalls), ["clone", "clone"]);
+
+      const workspace = JSON.parse(
+        fs.readFileSync(path.join(dir, "demo.armory.code-workspace"), "utf8"),
+      ) as { folders: Array<{ name: string; path: string }> };
+      assert.deepEqual(workspace.folders.slice(1), [
+        {
+          name: "example/widget/packages/app",
+          path: "deps/example/widget/packages/app",
+        },
+        {
+          name: "example/widget/packages/web",
+          path: "deps/example/widget/packages/web",
+        },
+        { name: "example/widget-feature-login", path: "deps/example/widget-feature-login" },
+      ]);
+      assert.equal(fs.existsSync(path.join(dir, "deps", "example", "widget", ".git")), true);
+      assert.equal(
+        fs.existsSync(path.join(dir, "deps", "example", "widget-feature-login", ".git")),
+        true,
+      );
     });
   });
 
@@ -77,6 +117,19 @@ describe("clone, fetch, pull, and sync", () => {
     });
   });
 
+  it("fails when two remotes would use the same clone directory", async () => {
+    await withTemp(async (dir) => {
+      writeJson(path.join(dir, "armory.json"), config([
+        { url: "https://github.com/example/widget.git" },
+        { url: "https://gitlab.com/example/widget.git" },
+      ]));
+      const result = await run({ args: ["clone"], cwd: dir });
+      assert.equal(result.code, 1);
+      assert.match(result.stderr, /already used by another repository/);
+      assert.deepEqual(gitCommands(result.gitCalls), []);
+    });
+  });
+
   it("stops after a git clone failure and still leaves earlier clones in place", async () => {
     await withTemp(async (dir) => {
       writeJson(path.join(dir, "armory.json"), config([
@@ -91,7 +144,10 @@ describe("clone, fetch, pull, and sync", () => {
           : undefined,
       });
       assert.equal(result.code, 1);
-      assert.match(result.stderr, /git clone --branch main --single-branch https:\/\/example.com\/example\/bad\.git .* exited with code 7/);
+      assert.match(
+        result.stderr,
+        /git clone https:\/\/example.com\/example\/bad\.git .* exited with code 7/,
+      );
       assert.equal(fs.existsSync(path.join(dir, "deps", "example", "ok", ".git")), true);
       assert.equal(fs.existsSync(path.join(dir, "deps", "example", "bad")), false);
       assert.equal(fs.existsSync(path.join(dir, "demo.armory.code-workspace")), false);
@@ -152,7 +208,7 @@ describe("clone, fetch, pull, and sync", () => {
         args: ["sync"],
         cwd: dir,
         onClone: (dest) => {
-          if (path.basename(dest) === "alpha") {
+          if (path.basename(dest) === "alpha-dev") {
             writeJson(path.join(dest, "armory.json"), {
               workspaceName: "alpha",
               reposRoot: "./nested",
@@ -173,9 +229,12 @@ describe("clone, fetch, pull, and sync", () => {
         "fetch",
         "pull",
       ]);
-      assert.equal(fs.existsSync(path.join(dir, "deps", "example", "alpha", "nested", "example", "leaf", ".git")), true);
       assert.equal(
-        fs.existsSync(path.join(dir, "deps", "example", "alpha", "alpha.armory.code-workspace")),
+        fs.existsSync(path.join(dir, "deps", "example", "alpha-dev", "nested", "example", "leaf", ".git")),
+        true,
+      );
+      assert.equal(
+        fs.existsSync(path.join(dir, "deps", "example", "alpha-dev", "alpha.armory.code-workspace")),
         false,
       );
     });
