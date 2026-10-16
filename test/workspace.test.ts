@@ -104,7 +104,7 @@ describe("workspace file", () => {
         tasks: { tasks: Array<{ options: { cwd: string } }> };
       };
       assert.deepEqual(document.folders, [{ name: "example/widget", path: "deps/example/widget" }]);
-      assert.equal(document.tasks.tasks[0]?.options.cwd, "${fileDirname:${workspaceFile}}");
+      assert.equal(document.tasks.tasks[0]?.options, undefined);
     });
   });
 
@@ -141,7 +141,7 @@ describe("workspace file", () => {
     });
   });
 
-  it("ignores a non-object workspaceSettings value by treating it as empty", async () => {
+  it("rejects a non-object workspaceSettings value", async () => {
     await withTemp(async (dir) => {
       writeJson(path.join(dir, "armory.json"), {
         workspaceName: "demo",
@@ -150,13 +150,8 @@ describe("workspace file", () => {
         workspaceSettings: "nope",
       });
       const result = await run({ args: ["clone"], cwd: dir });
-      assert.equal(result.code, 0);
-      const document = readJson(path.join(dir, "demo.armory.code-workspace")) as {
-        folders: unknown[];
-        tasks: { tasks: unknown[] };
-      };
-      assert.equal(document.folders.length, 1);
-      assert.equal(document.tasks.tasks.length, 5);
+      assert.equal(result.code, 1);
+      assert.match(result.stderr, /workspaceSettings must be an object/);
     });
   });
 });

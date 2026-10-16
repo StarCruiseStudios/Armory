@@ -38,21 +38,25 @@ describe("clone, fetch, pull, and sync", () => {
         "--branch",
         "release",
         "--single-branch",
+        "--",
         "git@github.com:example/widget.git",
         path.join(dir, "deps", "example", "widget-release"),
       ]);
       assert.deepEqual(clones[1]?.args, [
         "clone",
+        "--",
         "https://example.com/other/widget.git",
         path.join(dir, "deps", "other", "widget"),
       ]);
       assert.deepEqual(clones[2]?.args, [
         "clone",
+        "--",
         "https://gitlab.example/group/subgroup/tool.git",
         path.join(dir, "deps", "group", "subgroup", "tool"),
       ]);
       assert.deepEqual(clones[3]?.args, [
         "clone",
+        "--",
         "ssh://git@github.com/example/plugin.git",
         path.join(dir, "deps", "example", "plugin"),
       ]);
@@ -139,14 +143,14 @@ describe("clone, fetch, pull, and sync", () => {
       const result = await run({
         args: ["clone"],
         cwd: dir,
-        failGit: (args) => args.includes("https://example.com/example/bad.git")
+        failGit: (call) => call.args.includes("https://example.com/example/bad.git")
           ? { status: 7 }
           : undefined,
       });
       assert.equal(result.code, 1);
       assert.match(
         result.stderr,
-        /git clone https:\/\/example.com\/example\/bad\.git .* exited with code 7/,
+        /git clone -- https:\/\/example.com\/example\/bad\.git .* exited with code 7/,
       );
       assert.equal(fs.existsSync(path.join(dir, "deps", "example", "ok", ".git")), true);
       assert.equal(fs.existsSync(path.join(dir, "deps", "example", "bad")), false);
@@ -198,7 +202,7 @@ describe("clone, fetch, pull, and sync", () => {
     });
   });
 
-  it("sync clones, then fetches, then pulls, including repos materialized by the fake clone", async () => {
+  it("sync clones, then pulls, including repos materialized by the fake clone", async () => {
     await withTemp(async (dir) => {
       writeJson(path.join(dir, "armory.json"), config([
         { url: "https://example.com/example/alpha.git", branch: "dev" },
@@ -221,12 +225,9 @@ describe("clone, fetch, pull, and sync", () => {
       assert.deepEqual(gitCommands(result.gitCalls), [
         "clone",
         "clone",
-        "fetch",
-        "fetch",
         "pull",
         "pull",
         "clone",
-        "fetch",
         "pull",
       ]);
       assert.equal(

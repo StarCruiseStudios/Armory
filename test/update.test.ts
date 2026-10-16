@@ -77,7 +77,7 @@ describe("update", () => {
           text: async () => {
             throw new Error("truncated");
           },
-        }) as Response,
+        }) as unknown as Response,
       });
       assert.match(unreadable.stderr, /Failed to read update response: Error: truncated/);
 

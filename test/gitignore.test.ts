@@ -147,7 +147,7 @@ describe("gitignore", () => {
     });
   });
 
-  it("updates a nested repo's gitignore without writing a nested workspace file", async () => {
+  it("does not update a nested dependency repo's gitignore or workspace file", async () => {
     await withTemp(async (dir) => {
       writeJson(path.join(dir, "armory.json"), {
         workspaceName: "root",
@@ -168,10 +168,7 @@ describe("gitignore", () => {
       });
       assert.equal(result.code, 0);
       assert.equal(fs.existsSync(path.join(dir, ".gitignore")), false);
-      assert.equal(
-        fs.readFileSync(path.join(dir, "deps", "example", "child", ".gitignore"), "utf8"),
-        [START, "armory.ts", "*.armory.code-workspace", "vendor/", END, ""].join("\n"),
-      );
+      assert.equal(fs.existsSync(path.join(dir, "deps", "example", "child", ".gitignore")), false);
       assert.equal(
         fs.existsSync(path.join(dir, "deps", "example", "child", "child.armory.code-workspace")),
         false,

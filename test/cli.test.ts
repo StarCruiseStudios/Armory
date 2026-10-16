@@ -21,7 +21,7 @@ describe("cli", () => {
     await withTemp(async (dir) => {
       const help = await run({ args: ["--help"], cwd: dir });
       assert.equal(help.code, 0);
-      assert.match(help.stdout, /sync\s+Recursively clone, then fetch, then pull/);
+      assert.match(help.stdout, /sync\s+Recursively clone, then pull/);
 
       const withCommand = await run({ args: ["clone", "--help"], cwd: dir });
       assert.equal(withCommand.code, 0);
@@ -46,7 +46,7 @@ describe("cli", () => {
     });
   });
 
-  it("ignores tokens that follow a recognized command", async () => {
+  it("rejects extra positional arguments after a recognized command", async () => {
     await withTemp(async (dir) => {
       writeJson(path.join(dir, "armory.json"), {
         workspaceName: "demo",
@@ -54,8 +54,8 @@ describe("cli", () => {
         repos: [],
       });
       const result = await run({ args: ["clone", "extra"], cwd: dir });
-      assert.equal(result.code, 0);
-      assert.match(result.stdout, /workspace:/);
+      assert.equal(result.code, 1);
+      assert.match(result.stderr, /Unexpected extra argument: extra/);
     });
   });
 });

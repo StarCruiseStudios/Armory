@@ -33,6 +33,10 @@ export function cloneGitUrl(args: readonly string[]): string | undefined {
   if (args[0] !== "clone") {
     return undefined;
   }
+  const separator = args.indexOf("--");
+  if (separator >= 0) {
+    return args[separator + 1];
+  }
   if (args[1] === "--branch") {
     return args[4];
   }
@@ -50,7 +54,7 @@ export type RunOptions = {
   now?: number;
   fetch?: typeof fetch;
   onClone?: (dest: string, args: string[]) => void;
-  failGit?: (args: string[]) => GitFailure | undefined;
+  failGit?: (call: GitCall) => GitFailure | undefined;
 };
 
 export async function withTemp(fn: (dir: string) => Promise<void>): Promise<void> {
@@ -126,7 +130,7 @@ export async function run(options: RunOptions): Promise<RunResult> {
           return { status: 0, stdout: `${options.origin}\n`, stderr: "" } as never;
         }
 
-        const failure = options.failGit?.(recorded.args);
+        const failure = options.failGit?.(recorded);
         if (failure) {
           return {
             status: failure.status ?? null,
