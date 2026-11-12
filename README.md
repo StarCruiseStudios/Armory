@@ -24,38 +24,32 @@ When a module improves, you sync to pick up the latest version. When your projec
 
 ## Requirements
 
-- [Node.js](https://nodejs.org/) 22 or newer. Armory runs `armory.ts` using native TypeScript support.
+- [Node.js](https://nodejs.org/) 22.18 or newer, which includes `npm`.
 - `git` on your `PATH`.
 
 ## Setup
 
-Go to your project directory and download the script from GitHub. The same directory will hold `armory.json`.
-
-**macOS / Linux / Git Bash**
+Install the `armory` command from npm:
 
 ```bash
-curl -fsSL -o armory.ts https://raw.githubusercontent.com/StarCruiseStudios/Armory/main/armory.ts
+npm install --global @starcruisestudios/armory
 ```
 
-**PowerShell**
-
-```powershell
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/StarCruiseStudios/Armory/main/armory.ts" -OutFile armory.ts
-```
-
-Next, create a starter config:
+Next, go to your project directory and create a starter config:
 
 ```bash
-node armory.ts init
+armory init
 ```
 
-Edit `armory.json` to list the repositories you want, then run a full sync. The sync clones anything missing, fetches, pulls, and writes the workspace file.
+Edit `armory.json` to list the repositories you want, then run a full sync. The sync clones anything missing, pulls, and writes the workspace file.
 
 ```bash
-node armory.ts sync
+armory sync
 ```
 
 Finally, open `<workspaceName>.armory.code-workspace` in VS Code or Cursor. After that, you will run `sync` most often to stay current.
+
+You can also run Armory without installing it by using `npx @starcruisestudios/armory <command>`. The generated editor tasks call `armory` directly, so they need the global install.
 
 ## Commands
 
@@ -63,20 +57,21 @@ Run these from the directory that contains `armory.json`.
 
 | Command | Description |
 | --- | --- |
-| `node armory.ts init` | Creates `armory.json` in the current directory when it does not exist yet. |
-| `node armory.ts clone` | Recursively clones configured repos that are missing under each `reposRoot`. |
-| `node armory.ts fetch` | Recursively runs `git fetch --all --prune` in each configured repo. |
-| `node armory.ts pull` | Recursively runs `git pull --ff-only` in each configured repo. |
-| `node armory.ts sync` | Recursively runs `clone`, then `fetch`, then `pull`. This is the usual command for first-time setup and routine updates. |
-| `node armory.ts update` | Replaces `armory.ts` with the latest version from GitHub. |
-| `node armory.ts --help` | Prints usage details. |
+| `armory init` | Creates `armory.json` in the current directory, then writes the workspace file and the managed `.gitignore` block. It stops if `armory.json` already exists. |
+| `armory clone` | Recursively clones configured repos that are missing under each `reposRoot`. |
+| `armory fetch` | Recursively runs `git fetch --all --prune` in each configured repo. |
+| `armory pull` | Recursively runs `git pull --ff-only` in each configured repo. |
+| `armory sync` | Recursively runs `clone`, then `pull`. This is the usual command for first-time setup and routine updates. |
+| `armory update` | Updates Armory itself, from any directory. When Armory runs from a Git checkout, such as one set up with `npm link`, it runs `git pull --ff-only`, `npm install`, and `npm run build` in that checkout. Otherwise it runs `npm install --global @starcruisestudios/armory@latest`. |
+| `armory --help` | Prints usage details. |
+| `armory --version` | Prints the installed version. |
 
 When you run `clone`, `fetch`, `pull`, or `sync`, Armory also does a few things for you:
 
 - It creates or updates `<workspaceName>.armory.code-workspace` beside `armory.json`.
 - It looks for an `armory.json` at each configured `repoPath` and runs the same command on that dependency tree.
 - It skips any `armory.json` it has already processed. Shared dependencies are handled once.
-- It updates the managed `.gitignore` blocks so local clone paths stay ignored when they fall inside a Git repository.
+- It updates the managed `.gitignore` blocks so the generated workspace file and local clone paths stay ignored when they fall inside a Git repository.
 
 The generated workspace also includes **Armory** shell tasks for clone, fetch, pull, sync, and update. You can run the tool from inside the editor with them.
 
@@ -117,3 +112,15 @@ Here is a small example config:
   }
 }
 ```
+
+## Development
+
+The source lives in `src/` as TypeScript modules. `src/cli.ts` is the `armory` executable and `src/index.ts` is the library entry point. The build compiles them to `dist/`, which is the only directory the published package ships.
+
+| Script | Description |
+| --- | --- |
+| `npm run build` | Compiles `src/` to `dist/`. |
+| `npm run typecheck` | Type-checks the source and the tests. |
+| `npm test` | Builds, then runs the tests. Git and npm are stubbed, so the tests stay offline. |
+
+To use a local checkout as the `armory` command, run `npm install`, `npm run build`, and then `npm link`. After that, `armory update` pulls and rebuilds the checkout in place, and the link keeps pointing at it.

@@ -186,7 +186,7 @@ describe("clone, fetch, pull, and sync", () => {
       ]));
       const missing = await run({ args: ["fetch"], cwd: dir });
       assert.equal(missing.code, 1);
-      assert.match(missing.stderr, /Repository not cloned:.*Run "node armory\.ts clone" first/);
+      assert.match(missing.stderr, /Repository not cloned:.*Run "armory clone" first/);
 
       markGitRepo(path.join(dir, "deps", "example", "widget"));
       const fetched = await run({ args: ["fetch"], cwd: dir });

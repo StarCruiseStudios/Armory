@@ -1,10 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ArmoryExit, ArmoryFailure, runArmory } from "../armory.ts";
-
-export const ARMORY_RAW_URL =
-  "https://raw.githubusercontent.com/StarCruiseStudios/Armory/main/armory.ts";
+import { ArmoryExit, ArmoryFailure, runArmory } from "../src/index.ts";
 
 export type GitCall = {
   args: string[];
@@ -12,9 +9,17 @@ export type GitCall = {
   stdio?: string;
 };
 
-export type FetchCall = {
-  url: string;
-  init?: { headers?: Record<string, string> };
+export type NpmCall = {
+  command: string;
+  args: string[];
+  cwd?: string;
+  shell: boolean;
+  stdio?: string;
+};
+
+type NpmFailure = {
+  status?: number | null;
+  error?: Error;
 };
 
 type GitFailure = {
@@ -27,6 +32,7 @@ export type RunResult = {
   stdout: string;
   stderr: string;
   gitCalls: GitCall[];
+  npmCalls: NpmCall[];
 };
 
 export function cloneGitUrl(args: readonly string[]): string | undefined {
@@ -50,9 +56,9 @@ export type RunOptions = {
   argv?: string[];
   origin?: string | null;
   homedir?: string;
-  pid?: number;
-  now?: number;
-  fetch?: typeof fetch;
+  platform?: NodeJS.Platform;
+  packageRoot?: string;
+  failNpm?: (call: NpmCall) => NpmFailure | undefined;
   onClone?: (dest: string, args: string[]) => void;
   failGit?: (call: GitCall) => GitFailure | undefined;
 };
@@ -89,19 +95,17 @@ export async function run(options: RunOptions): Promise<RunResult> {
   let stdout = "";
   let stderr = "";
   const gitCalls: GitCall[] = [];
+  const npmCalls: NpmCall[] = [];
   let code = 0;
-  const fetchImpl: typeof fetch = options.fetch ?? (async () => {
-    throw new Error("network disabled in tests");
-  });
 
   try {
     await runArmory({
-      argv: options.argv ?? ["node", "armory.ts", ...options.args],
+      argv: options.argv ?? ["node", "armory", ...options.args],
       cwd: () => options.cwd,
       env: options.env ?? {},
       homedir: () => options.homedir ?? path.join(options.cwd, ".armory-home"),
-      pid: options.pid ?? 4242,
-      now: () => options.now ?? 1_700_000_000_000,
+      packageRoot: options.packageRoot ?? path.join(options.cwd, ".armory-package"),
+      ...(options.platform ? { platform: options.platform } : {}),
       stdout: {
         write(chunk: string) {
           stdout += String(chunk);
@@ -114,8 +118,25 @@ export async function run(options: RunOptions): Promise<RunResult> {
           return true;
         },
       },
-      fetch: fetchImpl,
-      spawnSync: (_command, args, spawnOptions) => {
+      spawnSync: (command, args, spawnOptions) => {
+        if (command !== "git") {
+          const npmCall: NpmCall = {
+            command,
+            args: [...args],
+            cwd: typeof spawnOptions.cwd === "string" ? spawnOptions.cwd : undefined,
+            shell: spawnOptions.shell === true,
+            stdio: typeof spawnOptions.stdio === "string" ? spawnOptions.stdio : undefined,
+          };
+          npmCalls.push(npmCall);
+          const npmFailure = options.failNpm?.(npmCall);
+          return {
+            status: npmFailure ? npmFailure.status ?? null : 0,
+            stdout: "",
+            stderr: "",
+            error: npmFailure?.error,
+          } as never;
+        }
+
         const recorded: GitCall = {
           args: [...args],
           cwd: typeof spawnOptions.cwd === "string" ? spawnOptions.cwd : undefined,
@@ -157,13 +178,13 @@ export async function run(options: RunOptions): Promise<RunResult> {
     });
   } catch (err) {
     if (err instanceof ArmoryExit) {
-      return { code, stdout, stderr, gitCalls };
+      return { code, stdout, stderr, gitCalls, npmCalls };
     }
     if (err instanceof ArmoryFailure) {
-      return { code: 1, stdout, stderr, gitCalls };
+      return { code: 1, stdout, stderr, gitCalls, npmCalls };
     }
     throw err;
   }
 
-  return { code, stdout, stderr, gitCalls };
+  return { code, stdout, stderr, gitCalls, npmCalls };
 }

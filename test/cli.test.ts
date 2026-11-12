@@ -10,7 +10,7 @@ describe("cli", () => {
       const result = await run({ args: [], cwd: dir });
       assert.equal(result.code, 1);
       assert.equal(result.stderr, "");
-      assert.match(result.stdout, /Usage: node armory\.ts <command>/);
+      assert.match(result.stdout, /Usage: armory <command>/);
       assert.match(result.stdout, /init\s+Create armory\.json/);
       assert.deepEqual(gitCommands(result.gitCalls), []);
       assert.equal(fs.existsSync(path.join(dir, "armory.json")), false);
@@ -25,7 +25,7 @@ describe("cli", () => {
 
       const withCommand = await run({ args: ["clone", "--help"], cwd: dir });
       assert.equal(withCommand.code, 0);
-      assert.match(withCommand.stdout, /Usage: node armory\.ts <command>/);
+      assert.match(withCommand.stdout, /Usage: armory <command>/);
       assert.deepEqual(gitCommands(withCommand.gitCalls), []);
     });
   });

@@ -8,7 +8,7 @@ function armoryTasks(cwd: string): unknown[] {
   return ["clone", "fetch", "pull", "sync", "update"].map((command) => ({
     label: `Armory: ${command}`,
     type: "shell",
-    command: `node armory.ts ${command}`,
+    command: `armory ${command}`,
     options: { cwd },
     presentation: { reveal: "always", panel: "shared" },
   }));

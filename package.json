@@ -1,13 +1,54 @@
 {
-  "name": "armory",
-  "private": true,
+  "name": "@starcruisestudios/armory",
+  "version": "0.1.0",
+  "description": "A package manager for modules of source code, built for agentic development. Clones the Git repositories a project depends on and generates a multi-root editor workspace.",
+  "keywords": [
+    "armory",
+    "git",
+    "workspace",
+    "monorepo",
+    "vscode",
+    "cursor",
+    "agents",
+    "cli"
+  ],
+  "license": "MIT",
+  "author": "Star Cruise Studios, LLC",
+  "homepage": "https://github.com/StarCruiseStudios/Armory#readme",
+  "bugs": {
+    "url": "https://github.com/StarCruiseStudios/Armory/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/StarCruiseStudios/Armory.git"
+  },
   "type": "module",
+  "bin": {
+    "armory": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
   "engines": {
     "node": ">=22.18.0"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
+    "clean": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "pretest": "npm run build",
     "test": "node --test --test-reporter spec \"test/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit"
+    "prepack": "npm run build"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",

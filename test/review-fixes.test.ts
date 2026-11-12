@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { ARMORY_RAW_URL, gitCommands, markGitRepo, run, withTemp, writeJson } from "./harness.ts";
-
-const VALID_SCRIPT = "#!/usr/bin/env node\nconst ARMORY_RAW_URL = \"kept\";\n";
+import { gitCommands, markGitRepo, run, withTemp, writeJson } from "./harness.ts";
 
 function config(repos: unknown[]): Record<string, unknown> {
   return {
@@ -66,25 +64,6 @@ describe("review fixes", () => {
       const result = await run({ args: ["clone"], cwd: dir });
       assert.equal(result.code, 1);
       assert.match(result.stderr, /workspaceName must not contain path separators/);
-    });
-  });
-
-  it("skips the update write when the downloaded script matches the current file", async () => {
-    await withTemp(async (dir) => {
-      const scriptPath = path.join(dir, "armory.ts");
-      fs.writeFileSync(scriptPath, VALID_SCRIPT, "utf8");
-      const result = await run({
-        args: ["update"],
-        cwd: dir,
-        argv: ["node", scriptPath, "update"],
-        fetch: async (url) => {
-          assert.equal(String(url), ARMORY_RAW_URL);
-          return new Response(VALID_SCRIPT, { status: 200, statusText: "OK" });
-        },
-      });
-      assert.equal(result.code, 0);
-      assert.match(result.stdout, /already up to date/);
-      assert.doesNotMatch(result.stdout, /updated:/);
     });
   });
 

@@ -44,7 +44,6 @@ describe("init", () => {
           "node_modules/",
           "",
           GITIGNORE_START,
-          "armory.ts",
           "*.armory.code-workspace",
           GITIGNORE_END,
           "",
@@ -66,7 +65,7 @@ describe("init", () => {
       assert.equal(result.code, 0);
       assert.equal(
         fs.readFileSync(path.join(project, ".gitignore"), "utf8"),
-        [GITIGNORE_START, "armory.ts", "*.armory.code-workspace", GITIGNORE_END, ""].join("\n"),
+        [GITIGNORE_START, "*.armory.code-workspace", GITIGNORE_END, ""].join("\n"),
       );
     });
   });

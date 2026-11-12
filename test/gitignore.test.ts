@@ -39,7 +39,6 @@ describe("gitignore", () => {
         "file[1].txt",
         "",
         START,
-        "armory.ts",
         "*.armory.code-workspace",
         "deps/",
         END,
@@ -56,7 +55,7 @@ describe("gitignore", () => {
       assert.equal(second.code, 0);
       assert.equal(
         fs.readFileSync(path.join(dir, ".gitignore"), "utf8"),
-        ["keep me", START, "armory.ts", "*.armory.code-workspace", "deps/", END, "also keep", ""].join("\n"),
+        ["keep me", START, "*.armory.code-workspace", "deps/", END, "also keep", ""].join("\n"),
       );
 
       const third = await run({ args: ["clone"], cwd: dir });
@@ -82,7 +81,7 @@ describe("gitignore", () => {
         assert.equal(external.code, 0);
         assert.equal(
           fs.readFileSync(path.join(project, ".gitignore"), "utf8"),
-          [START, "armory.ts", "*.armory.code-workspace", END, ""].join("\n"),
+          [START, "*.armory.code-workspace", END, ""].join("\n"),
         );
         assert.equal(fs.existsSync(path.join(dir, ".gitignore")), false);
       } finally {
@@ -105,7 +104,7 @@ describe("gitignore", () => {
       assert.equal(result.code, 0);
       assert.equal(
         fs.readFileSync(path.join(project, ".gitignore"), "utf8"),
-        [START, "armory.ts", "*.armory.code-workspace", END, ""].join("\n"),
+        [START, "*.armory.code-workspace", END, ""].join("\n"),
       );
       assert.equal(
         fs.readFileSync(path.join(dir, ".gitignore"), "utf8"),
@@ -129,7 +128,7 @@ describe("gitignore", () => {
       assert.equal(result.code, 0);
       assert.equal(
         fs.readFileSync(path.join(dir, ".gitignore"), "utf8"),
-        [START, "armory.ts", "*.armory.code-workspace", "example/widget/", "example/plugin/", END, ""].join("\n"),
+        [START, "*.armory.code-workspace", "example/widget/", "example/plugin/", END, ""].join("\n"),
       );
 
       writeJson(path.join(dir, "armory.json"), {
@@ -142,7 +141,7 @@ describe("gitignore", () => {
       assert.equal(empty.code, 0);
       assert.equal(
         fs.readFileSync(path.join(dir, ".gitignore"), "utf8"),
-        [START, "armory.ts", "*.armory.code-workspace", END, ""].join("\n"),
+        [START, "*.armory.code-workspace", END, ""].join("\n"),
       );
     });
   });
